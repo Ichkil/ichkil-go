@@ -1,0 +1,23 @@
+# Binaries & local builds
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+ichkil-cli
+ichkil-cli-*/
+
+# Test & coverage artifacts
+*.test
+*.out
+coverage.*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local model cache (if ever created inside the repo)
+.cache/

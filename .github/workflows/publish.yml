@@ -1,0 +1,93 @@
+name: Publish
+
+# Go modules are consumed through semver tags (proxy.golang.org). Pushing a
+# `v*` tag publishes the module: this workflow guards the tag, tests the
+# tagged commit, proves the module is consumable at that version, and creates
+# a GitHub Release so the version is discoverable on pkg.go.dev.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # GitHub Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Verify tag is a valid semver version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if ! echo "$tag" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a valid semver version (expected vMAJOR.MINOR.PATCH[-pre][+meta])"
+            exit 1
+          fi
+          echo "tag version: $tag"
+
+      - name: Verify version.go matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if ! grep -q "Version = \"$tag\"" version.go; then
+            echo "::error::version.go does not declare Version = \"$tag\" (tag: $GITHUB_REF_NAME)"
+            exit 1
+          fi
+          echo "version.go: Version = \"$tag\" ✓"
+
+      - name: Install ONNX Runtime (shared library for the integration tests)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install onnxruntime
+
+      - name: Build + test the tagged commit
+        env:
+          ICHKIL_ONNXRUNTIME_LIB: ""
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          export ICHKIL_ONNXRUNTIME_LIB=$(python -c "import onnxruntime; print(onnxruntime.get_library_path())")
+          go build ./...
+          go test -count=1 ./...
+
+      - name: Prove the module is consumable at this tag (fresh consumer module)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          workdir=$(mktemp -d)
+          export GOMODCACHE="$workdir/modcache"
+          export GOCACHE="$workdir/gocache"
+          mkdir -p "$workdir/consumer"
+          cd "$workdir/consumer"
+          go mod init example.com/ichkil-consumer
+          go get "github.com/Ichkil/ichkil-go@v${version}"
+          go mod tidy
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+              "fmt"
+
+              "github.com/Ichkil/ichkil-go"
+          )
+
+          func main() {
+              fmt.Println("ichkil-go", ichkil.Version, "labels:", ichkil.NumLabels)
+          }
+          EOF
+          go build -o ichkil-consumer .
+          ./ichkil-consumer
+          echo "module consumable: github.com/Ichkil/ichkil-go@v${version}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_notes: true
