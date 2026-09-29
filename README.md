@@ -4,7 +4,7 @@
 > no GPU, no tokenizer, no server). One call, fully offline after the first run.
 
 [![CI](https://github.com/Ichkil/ichkil-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Ichkil/ichkil-go/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/Ichkil/ichkil-go.svg)](https://pkg.go.dev/github.com/Ichkil/ichkil-go)
+[![go get](https://img.shields.io/badge/go%20get-Ichkil%2Fichkil--go-blue)](https://pkg.go.dev/github.com/Ichkil/ichkil-go)
 [![Go Version](https://img.shields.io/badge/go-1.21+-blue.svg)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Hugging Face model](https://img.shields.io/badge/%F0%9F%A4%97_model-ichkil%2Fichkil-yellow)](https://huggingface.co/ichkil/ichkil)
