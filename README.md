@@ -184,4 +184,4 @@ every developer (via proxy.golang.org) and the module appears on
 
 ## License
 
-[MIT](LICENSE) © 2026 Maaouia BenHamed
+MIT — [LICENSE](LICENSE) · [github.com/Ichkil/ichkil-go](https://github.com/Ichkil/ichkil-go) · © 2026 Maaouia BenHamed
