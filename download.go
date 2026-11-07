@@ -20,15 +20,16 @@ import (
 const (
 	// DefaultRepoID is the Hugging Face model repository.
 	DefaultRepoID = "ichkil/ichkil"
-	// DefaultRevision is the branch fetched by default.
-	DefaultRevision = "main"
+	// DefaultRevision is the model release fetched by default (a pinned tag of
+	// the Hugging Face repo; "v0.1.0" loads the previous 13-label model).
+	DefaultRevision = "v0.3.0"
 )
 
 // Config is the runtime configuration loaded from the model's config.json.
 type Config struct {
 	// Sym2ID maps every vocabulary symbol to its token id.
 	Sym2ID map[string]int `json:"sym2id"`
-	// NumTags is the number of output labels (13).
+	// NumTags is the number of output labels (16).
 	NumTags int `json:"num_tags"`
 	// MaxSeqLen is the maximum sequence length of the model (1024).
 	MaxSeqLen int `json:"max_seq_len"`

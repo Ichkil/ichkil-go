@@ -39,9 +39,9 @@ func loadGoldenVectors(t *testing.T) []goldenVector {
 	return doc.Vectors
 }
 
-func TestLabelTableCoversAll13Labels(t *testing.T) {
-	if NumLabels != 13 {
-		t.Fatalf("NumLabels = %d, want 13", NumLabels)
+func TestLabelTableCoversAll16Labels(t *testing.T) {
+	if NumLabels != 16 {
+		t.Fatalf("NumLabels = %d, want 16", NumLabels)
 	}
 	if len(labelToCombo) != NumLabels {
 		t.Fatalf("len(labelToCombo) = %d, want %d", len(labelToCombo), NumLabels)
@@ -115,7 +115,7 @@ func TestIsArabicLetter(t *testing.T) {
 		{'a', false},
 		{'1', false},
 		{' ', false},
-		{'\u0640', true},  // tatweel is inside the reference letter range
+		{'\u0640', false}, // tatweel is not a letter (contract v0.3)
 		{'\u0650', false}, // kasra is a diacritic, not a letter
 	}
 	for _, c := range cases {
@@ -180,14 +180,14 @@ func TestAttachShortLabelsLeavesRestPlain(t *testing.T) {
 }
 
 func TestDecodeFromFlatLogits(t *testing.T) {
-	// one char "ب": 13 logits, max at index 4 (kasra)
-	logits := make([]float32, 13)
+	// one char "ب": NumLabels logits, max at index 4 (kasra)
+	logits := make([]float32, NumLabels)
 	logits[4] = 9
 	if got := Decode("ب", logits, NumLabels); got != "بِ" {
 		t.Errorf("Decode = %q, want %q", got, "بِ")
 	}
 	// two chars; second all zeros -> argmax 0 -> no decoration (non-letter)
-	logits2 := make([]float32, 26)
+	logits2 := make([]float32, 2*NumLabels)
 	logits2[2] = 5 // first char: fatha
 	if got := Decode("ب ", logits2, NumLabels); got != "بَ " {
 		t.Errorf("Decode(ب , ...) = %q, want %q", got, "بَ ")

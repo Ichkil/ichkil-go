@@ -146,7 +146,7 @@ func TestResolveModelOfflineChecksumMismatch(t *testing.T) {
 	cacheDir := t.TempDir()
 	model := "fake model bytes"
 	// SHA256SUMS carries a digest that does NOT match the cached model.
-	seedCache(t, cacheDir, "main", model, strings.Repeat("0", 64))
+	seedCache(t, cacheDir, DefaultRevision, model, strings.Repeat("0", 64))
 
 	cfg := defaultConfig()
 	cfg.cacheDir = cacheDir
@@ -159,7 +159,7 @@ func TestResolveModelOfflineChecksumMismatch(t *testing.T) {
 func TestResolveModelOfflineChecksumPass(t *testing.T) {
 	cacheDir := t.TempDir()
 	model := "fake model bytes"
-	seedCache(t, cacheDir, "main", model, digestOf(model))
+	seedCache(t, cacheDir, DefaultRevision, model, digestOf(model))
 
 	cfg := defaultConfig()
 	cfg.cacheDir = cacheDir
@@ -167,7 +167,7 @@ func TestResolveModelOfflineChecksumPass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveModel = %v, want success", err)
 	}
-	if bundle.RepoID != "ichkil/ichkil" || bundle.Revision != "main" {
+	if bundle.RepoID != "ichkil/ichkil" || bundle.Revision != DefaultRevision {
 		t.Fatalf("bundle = %+v", bundle)
 	}
 	if _, err := os.Stat(bundle.OnnxPath); err != nil {
@@ -185,7 +185,7 @@ func TestResolveModelFallsBackToConfigSHA256(t *testing.T) {
 	// guaranteed to fail, so the expected digest must come from config.json
 	// sha256. Deterministic whether or not the network is reachable.
 	repoID := "ichkil/ichkil-test-nonexistent"
-	base := filepath.Join(cacheDir, "models--"+strings.ReplaceAll(repoID, "/", "--"), "main")
+	base := filepath.Join(cacheDir, "models--"+strings.ReplaceAll(repoID, "/", "--"), DefaultRevision)
 	writeFile(t, filepath.Join(base, "model.onnx"), model)
 	writeFile(t, filepath.Join(base, "config.json"),
 		`{"sym2id": {"<unk>": 1, "\u0627": 2}, "num_tags": 13, "sha256": "`+digestOf(model)+`"}`)

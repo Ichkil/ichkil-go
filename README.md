@@ -1,6 +1,6 @@
 # ichkil-go — Arabic Tashkeel for Go
 
-> Vocalize bare Arabic text with a tiny, self-contained ONNX model (≈5 MB, CPU-only,
+> Vocalize bare Arabic text with a tiny, self-contained ONNX model (≈22 MB, CPU-only,
 > no GPU, no tokenizer, no server). One call, fully offline after the first run.
 
 [![CI](https://github.com/Ichkil/ichkil-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Ichkil/ichkil-go/actions/workflows/ci.yml)
@@ -16,7 +16,7 @@ on first use, verifies its SHA-256, and runs inference with
 
 ```go
 got, err := ichkil.Diacritize(ctx, "محمد قرأ الكتاب")
-// got == "مُحَمَّدٌ قَرَأَ الْكِتَابِ"
+// got == "مُحَمَّدٌ قَرَأَ الْكِتَابَ"
 ```
 
 ## Install
@@ -71,7 +71,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    log.Println(got) // الْعِلْمِ نُورٌ وَالْجَهْلُ ظُلْمَةُ
+    log.Println(got) // الْعِلْمُ نُورٌ وَالْجَهْلُ ظُلْمَةٌ
 
     // explicit control
     d, err := ichkil.New(ctx) // default repository: ichkil/ichkil@main
@@ -81,7 +81,7 @@ func main() {
     defer d.Close()
 
     text, _ := d.Diacritize("محمد قرأ الكتاب")
-    labels, _ := d.PredictLabels("كتاب") // one label id per character, 0..12
+    labels, _ := d.PredictLabels("كتاب") // one label id per character, 0..15
 
     // fully offline: point at local files
     d2, err := ichkil.NewFromFiles("./model.onnx")
@@ -97,10 +97,10 @@ model resolution (network) only.
 
 ```bash
 go run github.com/Ichkil/ichkil-go/cmd/ichkil "محمد قرأ الكتاب"
-# مُحَمَّدٌ قَرَأَ الْكِتَابِ
+# مُحَمَّدٌ قَرَأَ الْكِتَابَ
 
 go run github.com/Ichkil/ichkil-go/cmd/ichkil --json "العلم نور"
-# {"input":"العلم نور","output":"الْعِلْمِ نُور"}
+# {"input":"العلم نور","output":"الْعِلْمُ نُورٌ"}
 
 cat text.txt | ichkil                    # read from stdin
 ichkil --model ./model.onnx "محمد"      # offline mode
@@ -111,14 +111,14 @@ ichkil --model ./model.onnx "محمد"      # offline mode
 | Item | Description |
 | --- | --- |
 | `ichkil.Diacritize(ctx, text) (string, error)` | Vocalize text (module-level convenience, lazy default model). |
-| `ichkil.PredictLabels(ctx, text) ([]int, error)` | Label id (0–12) per character. |
+| `ichkil.PredictLabels(ctx, text) ([]int, error)` | Label id (0–15) per character. |
 | `ichkil.New(ctx, opts...) (*Diacritizer, error)` | Resolve the model from Hugging Face and open an ONNX session. |
 | `ichkil.NewFromFiles(modelPath, opts...) (*Diacritizer, error)` | Build from a local `model.onnx` (+ `config.json` beside it). |
 | `(*Diacritizer).Diacritize(text)` / `.PredictLabels(text)` | Instance methods (same behavior). |
 | Options | `WithRepoID`, `WithRevision`, `WithCacheDir`, `WithToken`, `WithNumThreads`, `WithoutChecksumVerification`, `WithBaseURL`, `WithConfigPath`. |
 | `ichkil.SetDefault(d)` / `ResetDefault()` | Manage the shared default instance used by the module-level API. |
 | `ichkil.RuntimeVersion()` | Version of the loaded ONNX Runtime library. |
-| Pipeline | `StripDiacritics`, `Encode`, `Decode`, `Attach`, `Argmax`, `IsArabicLetter`, label tables. |
+| Pipeline | `NormalizeText`, `StripDiacritics`, `Encode`, `Decode`, `Attach`, `Argmax`, `IsArabicLetter`, label tables. |
 | Errors | Sentinels: `ErrChecksumMismatch`, `ErrModelLoad`, `ErrInference` (match with `errors.Is`). |
 | Env | `HF_TOKEN`, `HF_ENDPOINT`, `ICHKIL_CACHE_DIR`, `ICHKIL_ONNXRUNTIME_LIB`. |
 
@@ -134,54 +134,23 @@ The model predicts exactly one label per input character:
 | 3 | damma (ـُ) | 10 | tanwin fatha (ـً) |
 | 4 | kasra (ـِ) | 11 | tanwin damma (ـٌ) |
 | 5 | sukun (ـْ) | 12 | tanwin kasra (ـٍ) |
-| 6 | shadda (ـّ) | | |
+| 6 | shadda (ـّ) | 13 | shadda + tanwin fatha (ـًّ) |
+| | | 14 | shadda + tanwin damma (ـٌّ) |
+| | | 15 | shadda + tanwin kasra (ـٍّ) |
 
-Already-vocalized input is stripped first, so `Diacritize` output is canonical
+Input is normalized first (Unicode NFC, ٱ→ا, ی→ي, ک→ك, zero-width characters
+removed, whitespace collapsed) and existing marks are stripped, so vocalized and
+bare input give the same result. Labels predicted on non-letters are
+unspecified and never attached.
 and re-applying it changes nothing. Non-Arabic characters (Latin letters,
 digits, punctuation, spaces) pass through unchanged.
 
 ## Model provenance
 
-- Repository: [`ichkil/ichkil`](https://huggingface.co/ichkil/ichkil)
-  (`model.onnx`, `config.json`, `SHA256SUMS`)
-- SHA-256 of `model.onnx`: `9055816b214346b0a8044a4a8deceb36e818dffd0b04699715ea23883bf54744`
-- Contract: `input_ids` int64 `[batch, seq]` → `logits` float32 `[batch, seq, 13]`;
-  sequence length fully dynamic (up to `max_seq_len = 1024` in the golden contract)
-- Quality: DER 2.80 % on the reference evaluation set; ONNX output is bit-identical
-  to the PyTorch reference (equivalence verified)
-- Cache layout: `$ICHKIL_CACHE_DIR` (default `~/.cache/ichkil`) under
-  `models--ichkil--ichkil/<revision>/`, atomic downloads (`.part` → rename)
-
-## Development
-
-```bash
-go build ./...
-go test ./...          # pure pipeline + download tests (no network, no ONNX Runtime)
-
-# integration tests (download model once, ~5 MB) — need the ONNX Runtime lib:
-ICHKIL_ONNXRUNTIME_LIB=$(python -c "import onnxruntime; print(onnxruntime.get_library_path())") \
-  go test -v ./...
-
-gofmt -l .             # must print nothing
-go vet ./...
-```
-
-## Publishing
-
-Go modules are consumed through version tags — there is no separate package
-registry step. The `Publish` workflow fires on `v*` tags, builds and tests the
-tagged commit, verifies the tag is a valid semver, and creates a GitHub
-Release. From that moment `go get github.com/Ichkil/ichkil-go@vX.Y.Z` works for
-every developer (via proxy.golang.org) and the module appears on
-[pkg.go.dev](https://pkg.go.dev/github.com/Ichkil/ichkil-go).
-
-## Sibling libraries
-
-- [ichkil-python](https://github.com/Ichkil/ichkil-python) — PyPI package
-- [ichkil-js](https://github.com/Ichkil/ichkil-js) — npm package (Node.js + browser)
-- [Core repo](https://github.com/Ichkil/ichkil) — training, evaluation, model spec,
-  golden vectors
-
-## License
-
-MIT — [LICENSE](LICENSE) · [github.com/Ichkil/ichkil-go](https://github.com/Ichkil/ichkil-go) · © 2026 Maaouia BenHamed
+- Repository: [`ichkil/ichkil`](https://huggingface.co/ichkil/ichkil), pinned to the
+  **`v0.3.0`** tag by default (revision `v0.1.0` loads the previous 13-label model).
+- SHA-256 of `model.onnx` (v0.3.0): `9779e1aca89cebc77a9b92037b7d700c422cdf6c3774d4883f4652f641f3f705`
+- Contract: `input_ids` int64 `[batch, seq]` → `logits` float32 `[batch, seq, 16]`;
+  dynamic length, tested up to 1024 characters per call.
+- Quality (v0.3.0): DER 2.32 % on Fadel et al. 2019 (classical), 2.14 % on WikiNews
+  (modern Arabic); the ONNX artifact scores identically to the PyTorch reference.

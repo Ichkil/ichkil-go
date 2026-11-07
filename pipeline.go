@@ -1,14 +1,20 @@
 package ichkil
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
+)
 
 // Pure text pipeline for Arabic Tashkeel — no model, no third-party imports.
 //
 // The model emits exactly one label per input character:
 //
-//	0        non-letter token (space / punctuation) or padding
+//	0        non-letter token (space / punctuation / digit / Latin) or padding
 //	1        letter carries no diacritic
-//	2 .. 12  the eleven harakat / shadda / tanwin combinations
+//	2 .. 15  the harakat / shadda / tanwin combinations
+//	         (13..15 = shadda + tanwin, added in model v0.3)
 //
 // This file is the single source of truth shared by inference and the tests,
 // and it mirrors the reference implementation in the core repository and the
@@ -23,7 +29,7 @@ const (
 	// LabelNone is the label for a letter that carries no diacritic.
 	LabelNone = 1
 	// NumLabels is the number of distinct labels the model can emit.
-	NumLabels = 13
+	NumLabels = 16
 )
 
 // tatweel is the horizontal line, removed from input before encoding.
@@ -44,6 +50,9 @@ var labelToCombo = [...]string{
 	"\u064b",       // 10 tanwin fatha
 	"\u064c",       // 11 tanwin damma
 	"\u064d",       // 12 tanwin kasra
+	"\u0651\u064b", // 13 shadda + tanwin fatha
+	"\u0651\u064c", // 14 shadda + tanwin damma
+	"\u0651\u064d", // 15 shadda + tanwin kasra
 }
 
 // comboToLabel maps a diacritic combination to its label id.
@@ -57,9 +66,48 @@ var comboToLabel = func() map[string]int {
 	return m
 }()
 
-// IsArabicLetter reports whether r is a single Arabic letter (U+0621..U+064A).
+// IsArabicLetter reports whether r is an Arabic letter
+// (U+0621..U+063A, U+0641..U+064A; tatweel is not a letter).
 func IsArabicLetter(r rune) bool {
-	return r >= '\u0621' && r <= '\u064A'
+	return (r >= '\u0621' && r <= '\u063A') || (r >= '\u0641' && r <= '\u064A')
+}
+
+// charMap maps presentation variants to the base Arabic letters the model knows.
+var charMap = map[rune]rune{
+	'\u0671': '\u0627', // alef wasla -> alef
+	'\u06CC': '\u064A', // farsi yeh -> yeh
+	'\u06A9': '\u0643', // keheh -> kaf
+	'\u06C1': '\u0647', // heh goal -> heh
+	'\u00A0': ' ',      // no-break space
+}
+
+// NormalizeText returns the canonical form used by the model (mirror of the
+// core normalize_text): Unicode NFC, presentation variants mapped to base
+// Arabic letters, zero-width characters removed, whitespace runs collapsed to
+// one space, trimmed. Diacritics are kept (see StripDiacritics).
+func NormalizeText(text string) string {
+	text = norm.NFC.String(text)
+	var b strings.Builder
+	b.Grow(len(text))
+	space := false
+	for _, r := range text {
+		if m, ok := charMap[r]; ok {
+			r = m
+		}
+		if (r >= '\u200B' && r <= '\u200F') || r == '\uFEFF' {
+			continue
+		}
+		if unicode.IsSpace(r) {
+			space = true
+			continue
+		}
+		if space && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		space = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // isDiacritic reports whether r is an Arabic diacritic / harakat code point.
@@ -77,10 +125,11 @@ func isDiacritic(r rune) bool {
 	return false
 }
 
-// StripDiacritics returns text with all diacritics and tatweel removed.
-// Letters, spaces and punctuation are preserved so the result stays aligned
-// with the original character positions.
+// StripDiacritics normalizes text (see NormalizeText), then removes all
+// diacritics and tatweel. Letters, spaces and punctuation are preserved so the
+// result stays aligned with the characters the model sees.
 func StripDiacritics(text string) string {
+	text = NormalizeText(text)
 	var b strings.Builder
 	b.Grow(len(text))
 	for _, r := range text {

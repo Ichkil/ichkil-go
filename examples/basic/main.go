@@ -2,7 +2,7 @@
 //
 //	go run ./examples/basic
 //
-// On first run it downloads the ONNX model from Hugging Face (≈5 MB) and
+// On first run it downloads the ONNX model from Hugging Face (≈22 MB) and
 // caches it under ~/.cache/ichkil; afterwards everything works offline.
 package main
 
@@ -33,7 +33,7 @@ func main() {
 
 	fmt.Println(d.Diacritize("الكتاب على الطاولة"))
 
-	// Per-character labels (0..12).
+	// Per-character labels (0..15).
 	labels, err := d.PredictLabels("العلم نور")
 	if err != nil {
 		log.Fatalf("predict labels: %v", err)

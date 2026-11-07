@@ -1,7 +1,7 @@
 // Package ichkil provides Arabic Tashkeel (diacritization): it assigns
 // harakat, shadda and tanwin to bare Arabic text.
 //
-// The engine is a tiny, self-contained ONNX model (≈5 MB, CPU-only) that is
+// The engine is a tiny, self-contained ONNX model (≈22 MB, CPU-only) that is
 // downloaded from Hugging Face on first use and cached locally; afterwards
 // everything works offline.
 //
@@ -72,7 +72,7 @@ func WithRepoID(repoID string) Option {
 	return func(c *config) { c.repoID = repoID }
 }
 
-// WithRevision sets the branch, tag or commit to fetch (default "main").
+// WithRevision sets the branch, tag or commit to fetch (default "v0.3.0").
 func WithRevision(revision string) Option {
 	return func(c *config) { c.revision = revision }
 }
@@ -301,7 +301,7 @@ func (d *Diacritizer) RepoID() string { return d.repoID }
 // came from.
 func (d *Diacritizer) Revision() string { return d.revision }
 
-// NumLabels returns the number of distinct labels (13).
+// NumLabels returns the number of distinct labels (16).
 func (d *Diacritizer) NumLabels() int { return d.numLabels }
 
 // MaxSeqLen returns the model's maximum sequence length (1024).

@@ -10,7 +10,7 @@ import (
 
 // Integration tests for the ONNX-backed Diacritizer.
 //
-// They download the model from Hugging Face on the first run (≈5 MB, cached
+// They download the model from Hugging Face on the first run (≈22 MB, cached
 // under ~/.cache/ichkil afterwards) and require the onnxruntime shared
 // library — point ICHKIL_ONNXRUNTIME_LIB at it, e.g.:
 //
@@ -100,17 +100,17 @@ func TestEmptyAndWhitespace(t *testing.T) {
 	if labels != nil {
 		t.Errorf("PredictLabels(\"\") = %v, want nil", labels)
 	}
-	// whitespace is not empty: one label per character, like any other text
+	// whitespace-only input normalizes to the empty string (model v0.3 contract)
 	labels, err = d.PredictLabels("   ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(labels) != 3 {
-		t.Errorf("len(PredictLabels(\"   \")) = %d, want 3", len(labels))
+	if len(labels) != 0 {
+		t.Errorf("len(PredictLabels(\"   \")) = %d, want 0", len(labels))
 	}
 	for i, lab := range labels {
-		if lab < 0 || lab >= 13 {
-			t.Fatalf("labels[%d] = %d out of range [0,13)", i, lab)
+		if lab < 0 || lab >= NumLabels {
+			t.Fatalf("labels[%d] = %d out of range [0,%d)", i, lab, NumLabels)
 		}
 	}
 }
@@ -147,38 +147,45 @@ func TestMixedArabicLatin(t *testing.T) {
 	}
 }
 
-// TestIdempotency mirrors Python's test_idempotent_on_vocalized_text: these
-// already-vocalized strings are verified fixed points of the model (the same
-// strings the Python suite asserts, so the Go runtime is held to the exact
-// same contract).
+// TestIdempotency mirrors Python's test_idempotent_on_vocalized_text:
+// diacritizing the model's own output again must not change it.
 func TestIdempotency(t *testing.T) {
 	d := testDiacritizer(t)
 	for _, in := range []string{
-		"مُحَمَّدٌ قَرَأَ الْكِتَابَ فِي الْمَدْرَسَةِ",
-		"الْعِلْمِ نُورٌ وَالْجَهْلُ ظُلْمَةُ",
-		"مَدْرَسَةٌ",
+		"مُحَمَّدٌ قَرَأَ الْكِتَابَ فِي الْمَدْرَسَةِ",
+		"العلم نور والجهل ظلمة",
+		"مدرسة",
 	} {
-		got, err := d.Diacritize(in)
+		once, err := d.Diacritize(in)
 		if err != nil {
 			t.Fatalf("Diacritize(%q) = %v", in, err)
 		}
-		if got != in {
-			t.Errorf("Diacritize(%q) = %q, want idempotent %q", in, got, in)
+		twice, err := d.Diacritize(once)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if twice != once {
+			t.Errorf("Diacritize(%q) = %q, want idempotent %q", once, twice, once)
 		}
 	}
 }
 
 // TestNormalization mirrors Python's test_input_with_diacritics_is_normalized:
-// stripping then re-attaching yields the canonical golden form.
+// existing marks are stripped first, so vocalized and bare input give the same
+// result.
 func TestNormalization(t *testing.T) {
 	d := testDiacritizer(t)
-	for _, in := range []string{"مُحَمَّدٌ", "كِتَابِ"} {
-		got, err := d.Diacritize(in)
+	for _, pair := range [][2]string{{"مُحَمَّدٌ", "محمد"}, {"كِتَابِ", "كتاب"}, {"عَدُوٌّ", "عدو"}} {
+		got, err := d.Diacritize(pair[0])
 		if err != nil {
-			t.Fatalf("Diacritize(%q) = %v", in, err)
+			t.Fatalf("Diacritize(%q) = %v", pair[0], err)
 		}
-		if got != in {
-			t.Errorf("Diacritize(%q) = %q, want canonical %q", in, got, in)
+		want, err := d.Diacritize(pair[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("Diacritize(%q) = %q, want %q (same as bare input)", pair[0], got, want)
 		}
 	}
 }
@@ -194,20 +201,17 @@ func TestPredictLabelsShapeAndRange(t *testing.T) {
 		t.Fatalf("len(labels) = %d, want %d (per character)", len(labels), want)
 	}
 	for i, lab := range labels {
-		if lab < 0 || lab >= 13 {
-			t.Fatalf("labels[%d] = %d out of range [0,13)", i, lab)
+		if lab < 0 || lab >= NumLabels {
+			t.Fatalf("labels[%d] = %d out of range [0,%d)", i, lab, NumLabels)
 		}
 	}
-	// non-letter characters get "no diacritic" (0 or 1); attach() ignores them anyway
-	spaceIdx := 0
-	for i, r := range []rune(text) {
-		if r == ' ' {
-			spaceIdx = i
-			break
-		}
+	// labels on non-letters are unspecified; Attach never decorates them
+	out, err := d.Diacritize(text)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if labels[spaceIdx] != 0 && labels[spaceIdx] != 1 {
-		t.Errorf("labels[space] = %d, want 0 or 1", labels[spaceIdx])
+	if strings.Count(out, " ") != 1 {
+		t.Errorf("Diacritize(%q) = %q, want the space preserved", text, out)
 	}
 }
 
@@ -254,11 +258,11 @@ func TestNewFromFilesMissingModel(t *testing.T) {
 }
 
 func TestVersionAndPublicAPI(t *testing.T) {
-	if Version != "1.0.0" {
-		t.Errorf("Version = %q, want 1.0.0", Version)
+	if Version != "1.1.0" {
+		t.Errorf("Version = %q, want 1.1.0", Version)
 	}
-	if NumLabels != 13 {
-		t.Errorf("NumLabels = %d, want 13", NumLabels)
+	if NumLabels != 16 {
+		t.Errorf("NumLabels = %d, want 16", NumLabels)
 	}
 	// the module-level convenience API exists and delegates to the same code
 	_ = Diacritize
@@ -282,7 +286,7 @@ func TestString(t *testing.T) {
 	if !strings.Contains(s, "ichkil/ichkil") {
 		t.Errorf("String() = %q, want it to mention the repo", s)
 	}
-	if !strings.Contains(s, "13") {
+	if !strings.Contains(s, "16") {
 		t.Errorf("String() = %q, want it to mention the label count", s)
 	}
 }

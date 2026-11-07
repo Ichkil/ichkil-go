@@ -5,6 +5,26 @@ All notable changes to the `ichkil-go` module are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-07
+
+### Changed
+
+- Targets model **v0.3.0**: `DefaultRevision` is now pinned to the `v0.3.0` tag of
+  `ichkil/ichkil` (was `main`), so a future model release can never change the
+  behavior of an installed version. `WithRevision("v0.1.0")` still loads the old model.
+- **16 labels**: adds 13/14/15 = shadda + tanwin fatha / damma / kasra
+  (e.g. عَدُوٌّ, قَوِيًّا). Ids 0–12 are unchanged.
+- `StripDiacritics` now normalizes first (new `NormalizeText`: NFC, ٱ→ا, ی→ي, ک→ك,
+  ہ→ه, zero-width characters removed, whitespace collapsed), matching the model's
+  training data.
+- Arabic letter range is now U+0621–U+063A, U+0641–U+064A (tatweel is not a letter).
+- Model quality: DER 2.32 % on Fadel (was 2.80 %), 2.14 % on modern news (was ~11 %);
+  much better phrase endings, proper nouns and loanwords. Model size ≈22 MB.
+- Golden vectors updated to the v0.3.0 contract (37 vectors).
+- `PredictLabels` returns one label per character of the normalized, stripped
+  text (whitespace-only input now yields no labels).
+- New dependency: `golang.org/x/text` (Unicode NFC normalization).
+
 ## [1.0.0] - 2026-01-01
 
 ### Added
