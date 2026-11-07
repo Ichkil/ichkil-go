@@ -69,7 +69,6 @@ jobs:
           cd "$workdir/consumer"
           go mod init example.com/ichkil-consumer
           go get "github.com/Ichkil/ichkil-go@v${version}"
-          go mod tidy
           cat > main.go <<'EOF'
           package main
 
@@ -83,6 +82,8 @@ jobs:
               fmt.Println("ichkil-go", ichkil.Version, "labels:", ichkil.NumLabels)
           }
           EOF
+          # tidy only once main.go imports the module (tidy on an empty module drops it)
+          go mod tidy
           go build -o ichkil-consumer .
           ./ichkil-consumer
           echo "module consumable: github.com/Ichkil/ichkil-go@v${version}"
